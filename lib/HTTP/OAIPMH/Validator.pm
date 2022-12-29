@@ -1159,6 +1159,8 @@ sub test_expected_v2_errors {
     my @request_list = (
         [ "verb=ListRecords&metadataPrefix=".url_encode($metadata_prefix)."&from=2002-02-05&until=2002-02-06T05:35:00Z", ['badArgument'],
           'The request has different granularities for the from and until parameters.' ],
+        [ "verb=ListRecords&metadataPrefix=".url_encode($metadata_prefix)."&from=2002-02-05T05:35:00.000Z", ['badArgument'],
+          'The request included decimal seconds which are not allowed by the specification.' ],
         [ "verb=ListRecords&metadataPrefix=".url_encode($metadata_prefix)."&until=$too_early_date" , ['noRecordsMatch'],
           'The request specified a date one year before the earliestDatestamp given in the Identify response. '.
           'There should therefore not be any records with datestamps on or before this date and a noRecordsMatch '.
@@ -1465,7 +1467,7 @@ sub get_earliest_datestamp {
         $error="must have days granularity (format YYYY-MM-DD) to match the granularity for ".
                "the repository. The granularity has been set to days by the granularity ".
                "element of the Identify response (or that element is bad/missing).\n";
-    } elsif ( $self->granularity eq 'seconds' and $4 !~ /^T\d\d:\d\d:\d\d(\.\d+)?Z$/ ) {
+    } elsif ( $self->granularity eq 'seconds' and $4 !~ /^T\d\d:\d\d:\d\d?Z$/ ) {
         $error="does not have the correct format for the time part of the UTCdatetime. The ".
                "overall format must be YYYY-MM-DDThh:mm:ssZ.\n";
     }
@@ -1532,8 +1534,8 @@ sub get_datestamp_granularity {
     my ($datestamp)=@_;
     if ($datestamp=~/^(\d\d\d\d)-(\d\d)-(\d\d)$/) {
         return 'days' if ($2>=1 and $2<=12 and $3>=1 and $3<=31);
-    } elsif ($datestamp=~/^(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(\.\d+)?Z$/) {
-        return 'seconds' if ($2>=1 and $2<=12 and $3>=1 and $3<=31 and $4<24 and $5<60);
+    } elsif ($datestamp=~/^(\d\d\d\d)-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)Z$/) {
+        return 'seconds' if ($2>=1 and $2<=12 and $3>=1 and $3<=31 and $4<24 and $5<60 and $6<60);
     }
     return;
 }
