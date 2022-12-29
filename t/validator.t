@@ -1,7 +1,7 @@
 # Simple tests for HTTP::OAIPMH::Validator
 use strict;
 
-use Test::More tests => 90;
+use Test::More tests => 95;
 use Test::Exception;
 use Try::Tiny;
 use HTTP::Response;
@@ -75,8 +75,14 @@ is( $v->get_datestamp_granularity('2016-11-111'), undef );
 is( $v->get_datestamp_granularity('2016-11-11T01:01:01.Z'), undef );
 is( $v->get_datestamp_granularity('2016-11-11'), 'days' );
 is( $v->get_datestamp_granularity('2016-11-11T01:01:01Z'), 'seconds' );
-is( $v->get_datestamp_granularity('2016-11-11T01:01:01.1Z'), 'seconds' );
-is( $v->get_datestamp_granularity('2016-11-11T01:01:01.123456Z'), 'seconds' );
+is( $v->get_datestamp_granularity('2016-11-11T01:01:01.1Z'), undef );
+is( $v->get_datestamp_granularity('2016-11-11T01:01:01.123456Z'), undef );
+# silly dates/times
+is( $v->get_datestamp_granularity('2016-13-31T01:01:01Z'), undef );
+is( $v->get_datestamp_granularity('2016-12-32T01:01:01Z'), undef );
+is( $v->get_datestamp_granularity('2016-12-31T24:01:01Z'), undef );
+is( $v->get_datestamp_granularity('2016-12-31T01:61:01Z'), undef );
+is( $v->get_datestamp_granularity('2016-12-31T01:01:61Z'), undef );
 
 #is_no_records_match
 
