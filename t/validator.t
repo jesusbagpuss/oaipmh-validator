@@ -1,7 +1,7 @@
 # Simple tests for HTTP::OAIPMH::Validator
 use strict;
 
-use Test::More tests => 95;
+use Test::More tests => 103;
 use Test::Exception;
 use Try::Tiny;
 use HTTP::Response;
@@ -60,7 +60,39 @@ is( $v->log->log->[-1][0], 'FAIL');
 
 #error_elements_include
 #check_error_response
+
 #get_earliest_datestamp
+# The 'earliestDatestamp' doesn't call 'log' itself, so checking the return values (which would be getting logged)
+my $earliest = "2022-12-29T23:30:12Z";
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+# this references $self->doc, so we need to set it up before testing it.
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+$v->granularity('seconds');
+is( $v->get_earliest_datestamp(), undef ); # returns undef if there are no issues
+is( $v->earliest_datestamp(), $earliest ); 
+
+$earliest = "2022-12";
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+like( $v->get_earliest_datestamp(), qr/is not in ISO8601 format/ ); # returns undef if there are no issues
+
+# granularity already seconds
+$earliest = "2023-01-01";
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+like( $v->get_earliest_datestamp(), qr/must have seconds granularity/ ); # returns undef if there are no issues
+
+$earliest = "2023-01-01T23:32:12.1234Z";
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+like( $v->get_earliest_datestamp(), qr/does not have the correct format for the time part of the UTCdatetime/ ); 
+
+$earliest = "2023-01-01T23:32:12Z";
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+$v->granularity('days');
+like( $v->get_earliest_datestamp(), qr/must have days granularity/ ); 
+
+$earliest = "2023-01-01";
+$v->doc($parser->parse('<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd"><earliestDatestamp>'.$earliest.'</earliestDatestamp></OAI-PMH>'));
+$v->granularity('days');
+is( $v->get_earliest_datestamp(), undef ); 
 
 #parse_granularity
 
