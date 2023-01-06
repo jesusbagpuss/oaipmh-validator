@@ -1811,9 +1811,8 @@ sub make_request {
             $self->uses_503(1);
             if (defined  $response->header("Retry-After")) {
                 my $retryAfter=$response->header("Retry-After");
-                if ($retryAfter=~/^\d+$/) {
+                if ($retryAfter=~/^\d+$/) { # delay-seconds interval style 503
                     if ($retryAfter<=3600) {
-                        ###FIXME: Should check the Retry-After value carefully and barf if bad
                         my $sleep_time = 1 + $response->header("Retry-After");
                         $self->log->note("Status: ".$response->code().
                                          " -- going to sleep for $sleep_time seconds.");
@@ -1821,8 +1820,12 @@ sub make_request {
                     } else {
                         $self->abort("503 response with Retry-After > 1hour (3600s), aborting");
                     }
+		} elsif ($retryAfter=~/^[SMTWF][a-z][a-z], (\d\d) ([JFMAJSOND][a-z][a-z]) (\d\d\d\d) (\d\d):(\d\d):(\d\d) GMT$/) { #http-date style 503. Regex from HTTP::Date
+                        $self->log->note("Status: ".$response->code().
+			                 " -- absolute Retry-After header ($retryAfter), will wait for 10s");
+                        sleep 10;
                 } else {
-                    $self->log->fail("503 response with bad (non-numeric) Retry-After time, ".
+                    $self->log->fail("503 response with bad (non-numeric or bad date) Retry-After time, ".
                                      "will wait 10s");
                     sleep 10;
                 }

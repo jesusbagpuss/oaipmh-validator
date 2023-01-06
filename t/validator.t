@@ -1,7 +1,7 @@
 # Simple tests for HTTP::OAIPMH::Validator
 use strict;
 
-use Test::More tests => 90;
+use Test::More tests => 109;
 use Test::Exception;
 use Try::Tiny;
 use HTTP::Response;
@@ -121,6 +121,67 @@ my $resp=$v->make_request('http://example.org/req');
 is( $v->log->log->[-1][1], 'http://example.org/req GET');
 is( $resp->code, '200', 'simple request');
 is( $resp->content, 'content_123', 'simple request');
+
+# test Retry-After headers
+diag( "Note: HTTP 503 tests run slowly due to delay used between requests" );
+# Retry-After followed by OK
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+$v->ua->add_handler( request_send => sub { return shift(@RESPONSES); } );
+@RESPONSES = (
+       HTTP::Response->new(503, 'Service Unavailable'  ),
+       HTTP::Response->new(503, 'Service Unavailable', ['Retry-After', 3] ),
+       HTTP::Response->new(200, 'OK' ),
+);
+$resp=$v->make_request('http://example.org/req');
+is( $resp->code, '200', 'Retry-After followed by success');
+is( $v->log->log->[-1][0], 'NOTE');
+ok( $v->log->log->[-1][1]=~/Status: 503 -- going to sleep for \d+ seconds\./, 'Retry-After logged (i)');
+is( $v->log->log->[-2][0], 'WARN');
+ok( $v->log->log->[-2][1]=~/503 response without Retry-After time, will wait 10s/, 'Retry-After logged (ii)');
+
+# repeated Retry-After responses
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+$v->max_retries(3);
+$v->ua->add_handler( request_send => sub { return shift(@RESPONSES); } );
+
+# multiple requests are made. Add identical responses for each call - enough to cover the 'max_retries' set above.
+# Use a short delay so tests complete in a reasonable time
+@RESPONSES = (
+       ( HTTP::Response->new(503, 'Service Unavailable', ['Retry-After', 3] ) ) x 3
+);
+throws_ok( sub { $v->make_request('http://example.org/req') }, qr%ABORT: Too many 503 Retry-After%, 'Retry-After');
+
+
+# long Retry-After values
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+$v->ua->add_handler( request_send => sub { return shift(@RESPONSES); } );
+@RESPONSES = (
+       HTTP::Response->new(503, 'Service Unavailable', ['Retry-After', 3601] )
+);
+throws_ok( sub { $v->make_request('http://example.org/req') }, qr%ABORT: 503 response with Retry-After \> 1hour \(3600s\), aborting%, 'Long Retry-After');
+
+# absolute Retry-After values
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+$v->max_retries(3);
+$v->ua->add_handler( request_send => sub { return shift(@RESPONSES); } );
+@RESPONSES = (
+       ( HTTP::Response->new(503, 'Service Unavailable', ['Retry-After', 'Mon, 02 Jan 2023 00:00:00 GMT'] ) ) x 3
+);
+throws_ok( sub { $v->make_request('http://example.org/req') }, qr%ABORT: Too many 503 Retry-After%, 'Absolute Retry-After');
+is( $v->log->log->[-2][0], 'NOTE');
+ok( $v->log->log->[-2][1]=~/Status: 503 -- absolute Retry-After header/, 'Absolute Retry-After note');
+ok( $v->log->log->[-2][1]=~/will wait for 10s/, 'Absolute Retry-After wait time');
+
+# Bad retry after value
+ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
+$v->max_retries(3);
+$v->ua->add_handler( request_send => sub { return shift(@RESPONSES); } );
+@RESPONSES = (
+       ( HTTP::Response->new(503, 'Service Unavailable', ['Retry-After', 'Wibble'] ) ) x 3
+);
+throws_ok( sub { $v->make_request('http://example.org/req') }, qr%ABORT: Too many 503 Retry-After%, 'Absolute Retry-After');
+is( $v->log->log->[-2][0], 'FAIL');
+ok( $v->log->log->[-2][1]=~/503 response with bad \(non-numeric or bad date\)/, 'Bad Retry-After');
 
 #parse_response
 ok( $v = HTTP::OAIPMH::Validator->new, 'new validator object' );
